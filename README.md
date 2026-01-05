@@ -54,8 +54,13 @@ sc create ADCPService binPath= "C:\Program Files\adcp\adcp.exe --config C:\Progr
 
 The Windows service crate is configured as a target-specific dependency so builds on Linux remain lean.
 
+## Runtime capabilities
+- Serial polling and parsing reuses the existing supervisor loop so every ADCP line is parsed, validated, and persisted.
+- Persistence writes daily rotated logs under `data_directory`, ensuring health metrics can audit runtime state.
+- The supervisor exposes a health monitor that logs heartbeats and promotes alerts when frames stop arriving.
+
 ## Testing
-- `cargo test` (executes config parsing validations and future unit coverage).
+- `cargo test` (executes config parsing validations plus integration checks for Linux configs and the Windows service template).
 - Build with `cargo fmt` and `cargo clippy` before tagging releases.
 
 ## Implementation plan

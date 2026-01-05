@@ -1,4 +1,11 @@
 pub fn log_platform_guidance() {
+    tracing::info!(
+        template = platform_template(),
+        "platform-specific service descriptor available"
+    );
+}
+
+pub fn platform_template() -> &'static str {
     #[cfg(windows)]
     const TEMPLATE: &str = r#"[Service]
 ExecStart=adcp.exe --config C:\etc\adcp\adcp.toml
@@ -18,8 +25,5 @@ Restart=on-failure
 WantedBy=multi-user.target
 "#;
 
-    tracing::info!(
-        template = TEMPLATE,
-        "platform-specific service descriptor available"
-    );
+    TEMPLATE
 }
