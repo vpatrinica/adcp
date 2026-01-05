@@ -24,6 +24,8 @@ impl Service {
             data_directory,
             serial_port,
             baud_rate,
+            idle_threshold_seconds,
+            alert_webhook,
             ..
         } = self.config;
 
@@ -42,6 +44,8 @@ impl Service {
             supervisor_name.clone(),
             metrics.clone(),
             shutdown_rx.clone(),
+            Duration::from_secs(idle_threshold_seconds),
+            alert_webhook.clone(),
         ));
 
         let worker_future = {

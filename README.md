@@ -21,6 +21,8 @@ Cross-platform ADCP acquisition service focused on configuration discipline, str
 | `data_directory` | Destination directory for rotating files | `./data` |
 | `serial_port` | Physical or virtual serial port to bind (e.g., `/dev/ttyUSB0` or `COM3`) | n/a |
 | `baud_rate` | Serial baud rate used during handshake | `115200` |
+| `idle_threshold_seconds` | Seconds without frames before raising an alert | `30` |
+| `alert_webhook` | Optional URL to notify when health alerts fire | empty |
 
 Any missing option falls back to a sane default so the service can self-heal after partial deployments.
 
@@ -57,7 +59,7 @@ The Windows service crate is configured as a target-specific dependency so build
 ## Runtime capabilities
 - Serial polling and parsing reuses the existing supervisor loop so every ADCP line is parsed, validated, and persisted.
 - Persistence writes daily rotated logs under `data_directory`, ensuring health metrics can audit runtime state.
-- The supervisor exposes a health monitor that logs heartbeats and promotes alerts when frames stop arriving.
+- The supervisor exposes a health monitor that logs heartbeats and promotes alerts when frames stop arriving (with optional webhook logging).
 
 ## Testing
 - `cargo test` (executes config parsing validations plus integration checks for Linux configs and the Windows service template).

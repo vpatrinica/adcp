@@ -64,9 +64,10 @@ pub async fn monitor_health(
     supervisor_name: Arc<String>,
     metrics: Arc<Metrics>,
     mut shutdown: watch::Receiver<()>,
+    idle_threshold: Duration,
+    alert_webhook: Option<String>,
 ) -> Result<()> {
     let mut ticker = interval(Duration::from_secs(60));
-    let idle_threshold = Duration::from_secs(30);
     loop {
         tokio::select! {
             _ = shutdown.changed() => break,
@@ -87,6 +88,13 @@ pub async fn monitor_health(
                             "no frames in the last {} seconds",
                             idle_threshold.as_secs()
                         );
+                        if let Some(url) = &alert_webhook {
+                            tracing::error!(
+                                service = %supervisor_name,
+                                webhook = %url,
+                                "health alert triggered: idle beyond threshold"
+                            );
+                        }
                     }
                 }
             }

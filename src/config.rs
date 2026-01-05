@@ -12,6 +12,10 @@ pub struct AppConfig {
     pub serial_port: String,
     #[serde(default = "default_baud_rate")]
     pub baud_rate: u32,
+    #[serde(default = "default_idle_threshold_secs")]
+    pub idle_threshold_seconds: u64,
+    #[serde(default)]
+    pub alert_webhook: Option<String>,
 }
 
 fn default_log_level() -> String {
@@ -24,6 +28,10 @@ fn default_data_dir() -> String {
 
 fn default_baud_rate() -> u32 {
     115200
+}
+
+fn default_idle_threshold_secs() -> u64 {
+    30
 }
 
 impl AppConfig {
@@ -66,5 +74,7 @@ serial_port = \"/dev/null\""
         assert_eq!(config.log_level, "info");
         assert_eq!(config.data_directory, "./data");
         assert_eq!(config.baud_rate, 115200);
+        assert_eq!(config.idle_threshold_seconds, 30);
+        assert!(config.alert_webhook.is_none());
     }
 }
