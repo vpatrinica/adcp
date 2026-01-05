@@ -1,0 +1,5 @@
+service_name = "adcp-supervisor"
+log_level = "info"
+data_directory = "./data"
+serial_port = "/dev/ttyUSB0"
+baud_rate = 115200

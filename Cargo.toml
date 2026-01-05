@@ -1,6 +1,23 @@
 [package]
 name = "adcp"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+authors = ["Your Name <you@example.com>"]
+description = "Cross-platform ADCP acquisition service with operational resilience on Linux and Windows."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-org/adcp"
+readme = "README.md"
 
 [dependencies]
+anyhow = "1.0"
+tokio = { version = "1.43", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.7"
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
