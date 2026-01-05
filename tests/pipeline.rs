@@ -12,8 +12,8 @@ mod pipeline_linux {
         let metrics = Metrics::new();
 
         let lines = vec![
-            "2024-01-01T00:00:00Z,1.2,3.4",
-            "2024-01-01T00:00:01Z,1.3,3.5",
+            "$PNORS,010526,220800,00000000,3ED40002,23.7,1532.0,275.4,-49.1,83.0,0.000,24.02,0,0*77",
+            "$PNORC,010526,220800,1,-32.77,-32.77,-32.77,-32.77,46.34,225.0,C,65,64,61,59,40,37,14,22*35",
         ];
 
         for line in lines.iter() {
@@ -33,20 +33,22 @@ mod pipeline_linux {
         lines_written.sort();
         let mut expected: Vec<String> = lines
             .iter()
-            .map(|raw| {
-                let frame = Frame::from_line(raw).unwrap();
-                frame.to_persistence_line()
-            })
+            .map(|raw| Frame::from_line(raw).unwrap().to_persistence_line())
             .collect();
         expected.sort();
         assert_eq!(lines_written, expected);
 
-        // Ensure the timestamp is preserved as UTC
+        // Ensure the payload timestamp is preserved as UTC
         let parsed = Frame::from_line(lines[0]).unwrap();
-        assert_eq!(
-            parsed.timestamp,
-            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
-        );
+        match parsed.payload {
+            adcp::parser::Payload::Sensor(s) => {
+                assert_eq!(
+                    s.sent_at,
+                    Utc.with_ymd_and_hms(2026, 1, 5, 22, 8, 0).unwrap()
+                );
+            }
+            _ => panic!("expected sensor payload"),
+        }
     }
 }
 
@@ -62,8 +64,8 @@ mod pipeline_windows {
         let metrics = Metrics::new();
 
         let lines = vec![
-            "2024-01-01T00:00:00Z,0.1,0.2",
-            "2024-01-01T00:00:02Z,0.3,0.4",
+            "$PNORS,010526,220900,00000000,3ED40002,23.7,1532.0,275.9,-49.1,83.0,0.000,24.01,0,0*78",
+            "$PNORC,010526,220900,1,-32.77,-32.77,-32.77,-32.77,46.34,225.0,C,65,65,60,60,42,41,13,24*3C",
         ];
 
         for line in lines.iter() {

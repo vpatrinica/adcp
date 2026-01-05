@@ -61,6 +61,13 @@ The Windows service crate is configured as a target-specific dependency so build
 - Persistence writes daily rotated logs under `data_directory`, ensuring health metrics can audit runtime state.
 - The supervisor exposes a health monitor that logs heartbeats and promotes alerts when frames stop arriving (with optional webhook logging).
 
+## AWAC NMEA payloads (DF=100)
+- Sample capture: [tests/sample.data](tests/sample.data)
+- Shared rules: values that are empty or start with `-9` (for example `-9`, `-9.00`, `-999`) mean "not valid"; the XOR checksum is the two-hex digits after `*`, computed over everything between `$` and `*`.
+- `$PNORI` (configuration): instrument type (`4` = Signature), head ID string, beams (integer), cells (integer), blanking distance m (float), cell size m (float), coordinate system (`0`=ENU, `1`=XYZ, `2`=BEAM), checksum.
+- `$PNORS` (sensor data): date `MMDDYY`, time `hhmmss`, error code (hex), status code (hex), battery voltage V (float), sound speed m/s (float), heading deg (float), pitch deg (float), roll deg (float), pressure dBar (float), temperature °C (float), analog input #1 (float), analog input #2 (float), checksum.
+- `$PNORC` (current velocity): date `MMDDYY`, time `hhmmss`, cell number (integer), velocities 1–4 m/s (floats), speed m/s (float), direction deg (float), amplitude unit (`C` = counts, multiply by 0.50 for dB), amplitude beams 1–4 (ints), correlation beams 1–4 percent (ints), checksum.
+
 ## Testing
 - `cargo test` (executes config parsing validations plus integration checks for Linux configs and the Windows service template).
 - Build with `cargo fmt` and `cargo clippy` before tagging releases.
