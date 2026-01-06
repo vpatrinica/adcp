@@ -107,6 +107,7 @@ mod pipeline_windows {
                 max_backup_files: None,
                 max_backup_age_days: None,
                 file_stability_seconds: 5,
+                sample_file: None,
             };
 
             simulator::replay_sample("tests/sample.data", &cfg)
@@ -144,6 +145,7 @@ mod pipeline_windows {
                 max_backup_files: None,
                 max_backup_age_days: None,
                 file_stability_seconds: 5,
+                sample_file: None,
             };
 
             simulator::replay_sample("tests/sample2.data", &cfg)

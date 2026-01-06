@@ -1,0 +1,4 @@
+service_name = "adcp-simulator"
+mode = "Simulator"
+serial_port = "./deployment/tmp/adcp_fifo"
+sample_file = "tests/sample.data"

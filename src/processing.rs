@@ -43,9 +43,16 @@ pub async fn run_processing_loop(
         let mut files: Vec<PathBuf> = Vec::new();
         while let Ok(Some(ent)) = entries.next_entry().await {
             let path = ent.path();
-            if path.is_file() {
-                files.push(path);
+            if !path.is_file() {
+                continue;
             }
+            // Skip writer marker files ("*.writing"); only process raw data files
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.ends_with(".writing") {
+                    continue;
+                }
+            }
+            files.push(path);
         }
 
         // Sort by filename (date-based filenames will sort chronologically)
@@ -91,6 +98,11 @@ pub async fn run_processing_loop(
             }
         }
 
+        // Cleanup stale marker files: remove any `*.writing` older than a few times the stability window
+        if let Err(err) = cleanup_stale_markers(&data_dir, stable_secs).await {
+            tracing::warn!(error = %err, "failed to cleanup stale markers");
+        }
+
         if !any_work {
             sleep(Duration::from_secs(SCAN_INTERVAL_SECS)).await;
         }
@@ -127,7 +139,8 @@ async fn is_stable(path: &PathBuf, stable_secs: u64) -> Result<bool> {
                 // writer was active recently
                 return Ok(false);
             }
-            // Otherwise it's old enough: file is stable
+            // Otherwise it's old enough: remove the stale marker and treat file as stable
+            let _ = fs::remove_file(&marker_path).await;
             Ok(true)
         }
         Err(_) => {
@@ -144,10 +157,28 @@ async fn move_to_processed(path: &PathBuf, processed_dir: &PathBuf) -> Result<()
     let dest = processed_dir.join(name);
     // Attempt atomic rename; fallback to copy + remove
     match fs::rename(path, &dest).await {
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            // Attempt to remove writer marker in original folder
+            if let Some(fname) = name.to_str() {
+                let marker_name = format!("{}.writing", fname);
+                let marker_path = path.parent().unwrap_or_else(|| std::path::Path::new(".")).join(marker_name);
+                let _ = fs::remove_file(marker_path).await;
+            }
+            Ok(())
+        }
         Err(_) => {
             fs::copy(path, &dest).await?;
             fs::remove_file(path).await?;
+            // Attempt to remove writer marker in original folder
+            if let Some(fname) = name.to_str() {
+                let marker_name = format!("{}.writing", fname);
+                let marker_path = processed_dir.parent().unwrap_or_else(|| std::path::Path::new(".")).join(&marker_name);
+                // If marker still exists in original location (we removed original file), try to remove
+                let _ = fs::remove_file(marker_path).await;
+                // Also try to remove marker in processed dir (in case it exists there)
+                let proc_marker = processed_dir.join(format!("{}.writing", fname));
+                let _ = fs::remove_file(proc_marker).await;
+            }
             Ok(())
         }
     }
@@ -167,6 +198,45 @@ async fn move_failed(path: &PathBuf, processed_dir: &PathBuf) -> Result<()> {
             Ok(())
         }
     }
+}
+
+async fn cleanup_stale_markers(dir: &PathBuf, stable_secs: u64) -> Result<()> {
+    let mut read = tokio::fs::read_dir(dir).await?;
+    let threshold = std::time::Duration::from_secs(stable_secs.saturating_mul(1));
+    while let Ok(Some(entry)) = read.next_entry().await {
+        let path = entry.path();
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if name.ends_with(".writing") {
+                // check mtime
+                if let Ok(metadata) = tokio::fs::metadata(&path).await {
+                    if let Ok(modified) = metadata.modified() {
+                        let age = std::time::SystemTime::now().duration_since(modified).unwrap_or_default();
+                        if age > threshold {
+                            // also check corresponding raw file exists and is old
+                            let raw_name = name.trim_end_matches(".writing");
+                            let raw_path = dir.join(raw_name);
+                            let remove_ok = match tokio::fs::metadata(&raw_path).await {
+                                Ok(rm) => {
+                                    if let Ok(rmod) = rm.modified() {
+                                        let rage = std::time::SystemTime::now().duration_since(rmod).unwrap_or_default();
+                                        rage > threshold
+                                    } else {
+                                        true
+                                    }
+                                }
+                                Err(_) => true,
+                            };
+                            if remove_ok {
+                                let _ = tokio::fs::remove_file(&path).await;
+                                tracing::info!(marker = %name, "removed stale writing marker");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -210,6 +280,7 @@ mod tests {
             max_backup_files: None,
             max_backup_age_days: None,
             file_stability_seconds: stable,
+            sample_file: None,
         };
 
         let (shutdown_tx, shutdown_rx) = watch::channel(());

@@ -100,7 +100,7 @@ pub enum AmplitudeUnit {
 
 impl Frame {
     pub fn from_line(line: &str) -> Result<Self> {
-        let raw = line.trim();
+        let raw = line.trim_end_matches(|c| c == '\r' || c == '\n').trim();
         let (provided, computed, body) = validate_checksum(raw)?;
         let fields: Vec<&str> = body.split(',').collect();
         let ident = fields
@@ -145,12 +145,41 @@ fn validate_checksum(raw: &str) -> Result<(u8, u8, &str)> {
     let (body, checksum_hex) = raw
         .rsplit_once('*')
         .ok_or_else(|| anyhow!("NMEA sentence missing '*' checksum delimiter"))?;
-    let provided = u8::from_str_radix(checksum_hex, 16)
-        .with_context(|| format!("checksum '{checksum_hex}' is not hex"))?;
+    let original = checksum_hex;
+    let checksum_hex = checksum_hex.trim_end_matches("\r\n");
+    // Collect the first two hex digits after '*' and ignore any trailing junk.
+    let mut hex_chars = String::with_capacity(2);
+    for c in checksum_hex.chars() {
+        if c.is_ascii_hexdigit() {
+            hex_chars.push(c);
+            if hex_chars.len() == 2 {
+                break;
+            }
+        } else if !c.is_whitespace() {
+            // stop at the first non-hex, non-space char once we've seen any chars
+            if !hex_chars.is_empty() {
+                break;
+            }
+        }
+    }
+    if hex_chars.len() != 2 {
+        bail!("checksum '{}' is not two hex digits, original '{}'", hex_chars, original);
+    }
+    let provided = u8::from_str_radix(&hex_chars, 16)
+        .with_context(|| format!("checksum '{}' is not hex, original '{}'", hex_chars, original))?;
+
+    // If the body contains junk before a known sentence ($PNORC/$PNORS/$PNORI), trim it.
+    let mut body = body;
+    if let Some(pos) = body.find("$PNORC") {
+        body = &body[pos..];
+    } else if let Some(pos) = body.find("$PNORS") {
+        body = &body[pos..];
+    } else if let Some(pos) = body.find("$PNORI") {
+        body = &body[pos..];
+    }
+
     let body = body.strip_prefix('$').unwrap_or(body);
-    let computed = body
-        .bytes()
-        .fold(0u8, |acc, b| acc ^ b);
+    let computed = body.bytes().fold(0u8, |acc, b| acc ^ b);
     if provided != computed {
         bail!(
             "checksum mismatch: provided {provided:02X} != computed {computed:02X}"

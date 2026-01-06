@@ -6,6 +6,8 @@ use std::{fs, path::Path};
 pub enum ServiceMode {
     Recording,
     Processing,
+    Orchestrator,
+    Simulator,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -42,6 +44,7 @@ pub struct AppConfig {
     pub max_backup_age_days: Option<u64>,
     #[serde(default = "default_file_stability_secs")]
     pub file_stability_seconds: u64,
+    pub sample_file: Option<String>,
 }
 
 fn default_log_level() -> String {
@@ -53,7 +56,7 @@ fn default_file_stability_secs() -> u64 {
 }
 
 fn default_data_dir() -> String {
-    "./data".to_string()
+    "./deployment/data".to_string()
 }
 
 fn default_baud_rate() -> u32 {
@@ -69,15 +72,15 @@ fn default_mode() -> ServiceMode {
 }
 
 fn default_backup_folder() -> String {
-    "./backup".to_string()
+    "./deployment/backup".to_string()
 }
 
 fn default_data_process_folder() -> String {
-    "./to_process".to_string()
+    "./deployment/to_process".to_string()
 }
 
 fn default_processed_folder() -> String {
-    "./processed".to_string()
+    "./deployment/processed".to_string()
 }
 
 fn default_split_mode() -> SplitMode {

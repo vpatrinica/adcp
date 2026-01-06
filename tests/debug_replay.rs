@@ -19,6 +19,7 @@ async fn replay_literal_fixture_direct() {
         max_backup_files: None,
         max_backup_age_days: None,
         file_stability_seconds: 5,
+        sample_file: None,
     };
 
     let res = simulator::replay_sample("tests/fixtures/literal.data", &cfg).await;
