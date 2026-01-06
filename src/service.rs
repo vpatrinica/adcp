@@ -38,7 +38,7 @@ impl Service {
         let AppConfig {
             service_name,
             data_directory,
-            serial_port,
+            serial_port: serial_port_opt,
             baud_rate,
             idle_threshold_seconds,
             alert_webhook,
@@ -50,7 +50,7 @@ impl Service {
         let (shutdown_tx, shutdown_rx) = watch::channel(());
         let supervisor_name = Arc::new(service_name.clone());
         let data_directory = Arc::new(data_directory.clone());
-        let serial_port = Arc::new(serial_port.clone());
+        let serial_port = Arc::new(serial_port_opt.clone().ok_or_else(|| anyhow::anyhow!("serial_port required for Recording mode"))?);
         let backup_folder = Arc::new(backup_folder.clone());
         let data_process_folder = Arc::new(data_process_folder.clone());
         let metrics = Arc::new(metrics::Metrics::new());
@@ -312,7 +312,7 @@ impl Service {
         
         // Spawn processor (use configured folders)
         let processor_config = format!(
-            "service_name = \"adcp-processor\"\nmode = \"Processing\"\nserial_port = \"/dev/null\"\ndata_process_folder = \"{}\"\nprocessed_folder = \"{}\"\ndata_directory = \"{}\"\nfile_stability_seconds = {}\n",
+            "service_name = \"adcp-processor\"\nmode = \"Processing\"\ndata_process_folder = \"{}\"\nprocessed_folder = \"{}\"\ndata_directory = \"{}\"\nfile_stability_seconds = {}\n",
             &self.config.data_process_folder,
             &self.config.processed_folder,
             &self.config.data_directory,
@@ -398,17 +398,38 @@ impl Service {
             }
         });
 
-        // Wait for ctrl-c; watchdog will restart children as needed
+        // Wait for ctrl-c
         signal::ctrl_c().await.ok();
         tracing::info!("orchestrator shutting down");
 
-        // kill children
-        if let Some(mut c) = sim_child.lock().await.take() { c.kill().await.ok(); }
-        if let Some(mut c) = rec_child.lock().await.take() { c.kill().await.ok(); }
-        if let Some(mut c) = proc_child.lock().await.take() { c.kill().await.ok(); }
-
-        // watchdog task is detached; dropping children will cause it to try restarts but process is exiting
+        // Stop the watchdog first so it does not restart children while we shut them down
         watchdog.abort();
+        let _ = watchdog.await;
+
+        // kill children and wait for them to exit
+        if let Some(mut c) = sim_child.lock().await.take() {
+            let _ = c.kill().await;
+            let _ = c.wait().await;
+        }
+        if let Some(mut c) = rec_child.lock().await.take() {
+            let _ = c.kill().await;
+            let _ = c.wait().await;
+        }
+        if let Some(mut c) = proc_child.lock().await.take() {
+            let _ = c.kill().await;
+            let _ = c.wait().await;
+        }
+
+        // Cleanup any leftover child pid files created by children (best-effort)
+        if let Ok(rd) = std::fs::read_dir("./deployment/tmp") {
+            for entry in rd.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.starts_with("adcp-") && name.ends_with(".pid") {
+                        let _ = std::fs::remove_file(entry.path());
+                    }
+                }
+            }
+        }
         // Cleanup any leftover writer marker files in the data process folder
         let dp_ref = self.config.data_process_folder.clone();
         if let Err(e) = async move {
@@ -463,7 +484,7 @@ impl Service {
 
     async fn run_simulator(&self) -> Result<()> {
         let sample_file = self.config.sample_file.as_ref().ok_or_else(|| anyhow::anyhow!("sample_file required for simulator mode"))?;
-        let fifo_path = &self.config.serial_port; // Use serial_port as the output FIFO
+        let fifo_path = self.config.serial_port.as_ref().ok_or_else(|| anyhow::anyhow!("serial_port required for simulator mode"))?; // Use serial_port as the output FIFO
         // Ensure tmp dir exists and start heartbeat for simulator
         let tmp_dir = "./deployment/tmp".to_string();
         fs::create_dir_all(&tmp_dir).await.ok();

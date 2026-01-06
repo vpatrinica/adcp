@@ -1,6 +1,5 @@
 service_name = "adcp-processor"
 mode = "Processing"
-serial_port = "/dev/null"
 data_process_folder = "./to_process"
 processed_folder = "./processed"
 data_directory = "./data"

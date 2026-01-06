@@ -7,7 +7,7 @@ async fn replay_literal_fixture_direct() {
         service_name: "dbg-replay".into(),
         log_level: "info".into(),
         data_directory: tmp.path().to_string_lossy().to_string(),
-        serial_port: "/dev/null".into(),
+        serial_port: Some("/dev/null".into()),
         baud_rate: 115200,
         idle_threshold_seconds: 30,
         alert_webhook: None,

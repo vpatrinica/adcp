@@ -23,7 +23,8 @@ pub struct AppConfig {
     pub log_level: String,
     #[serde(default = "default_data_dir")]
     pub data_directory: String,
-    pub serial_port: String,
+    #[serde(default)]
+    pub serial_port: Option<String>,
     #[serde(default = "default_baud_rate")]
     pub baud_rate: u32,
     #[serde(default = "default_idle_threshold_secs")]
@@ -123,7 +124,7 @@ serial_port = \"/dev/null\""
         .unwrap();
         let config = AppConfig::load(file.path()).expect("load config");
         assert_eq!(config.service_name, "test-dummy");
-        assert_eq!(config.serial_port, "/dev/null");
+        assert_eq!(config.serial_port.as_deref(), Some("/dev/null"));
         assert_eq!(config.log_level, "info");
         assert_eq!(config.data_directory, "./data");
         assert_eq!(config.baud_rate, 115200);

@@ -59,13 +59,75 @@ async fn main() -> Result<()> {
     let config = AppConfig::load(&cli.config_path)
         .with_context(|| format!("unable to load configuration from {}", cli.config_path))?;
 
-    logging::init(&config)?;
+    let guard = logging::init(&config)?;
     platform::log_platform_guidance();
+
+    // Ensure deployment tmp exists and write PID file for this service
+    let tmp_dir = "./deployment/tmp";
+    std::fs::create_dir_all(tmp_dir).with_context(|| format!("failed to create tmp dir {}", tmp_dir))?;
+
+    // On Unix, make this process the leader of a new process group so we can signal children
+    #[cfg(unix)]
+    {
+        unsafe { libc::setpgid(0, 0) }; // ignore errors; best-effort
+    }
+    let safe_name = config.service_name.replace(' ', "_");
+    let pid_path = format!("{}/{}.pid", tmp_dir, safe_name);
+    std::fs::write(&pid_path, format!("{}", std::process::id()))
+        .with_context(|| format!("failed to write pid file {}", pid_path))?;
+
+    // Spawn a task to remove the pid file on SIGINT/SIGTERM (Unix) or ctrl-c (Windows)
+    // and attempt to gracefully shut down child processes by signaling the process group.
+    let pid_path_clone = pid_path.clone();
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{signal, SignalKind};
+            use tokio::time::{sleep, Duration};
+            let mut sigint = signal(SignalKind::interrupt()).expect("signal handler");
+            let mut sigterm = signal(SignalKind::terminate()).expect("signal handler");
+            tokio::select! {
+                _ = sigint.recv() => {},
+                _ = sigterm.recv() => {},
+            }
+            // Remove pid file immediately (best-effort) so tests won't see stale PID
+            let _ = std::fs::remove_file(&pid_path_clone);
+            // Attempt graceful shutdown: send SIGINT to process group
+            let pgid = -(std::process::id() as i32);
+            unsafe { libc::kill(pgid, libc::SIGINT) }; // best-effort
+            // Wait a short while for children to exit
+            sleep(Duration::from_secs(3)).await;
+            // Force kill any remaining processes in the group
+            unsafe { libc::kill(pgid, libc::SIGKILL) };
+
+            // Best-effort: cleanup any leftover adcp-*.pid files in deployment/tmp
+            if let Ok(rd) = std::fs::read_dir("./deployment/tmp") {
+                for entry in rd.flatten() {
+                    if let Some(name) = entry.file_name().to_str() {
+                        if name.starts_with("adcp-") && name.ends_with(".pid") {
+                            let _ = std::fs::remove_file(entry.path());
+                        }
+                    }
+                }
+            }
+        }
+        #[cfg(windows)]
+        {
+            // On Windows, best-effort: trigger ctrl-c handler
+            tokio::signal::ctrl_c().await.ok();
+        }
+        let _ = std::fs::remove_file(&pid_path_clone);
+    });
 
     if let Some(sample) = cli.replay {
         simulator::replay_sample(sample, &config).await?;
         return Ok(());
     }
 
-    Service::new(config).run().await
+    let res = Service::new(config).run().await;
+    // Attempt to remove pid file on exit (best-effort)
+    let _ = std::fs::remove_file(&pid_path);
+    // Drop the tracing_appender guard to flush logs
+    drop(guard);
+    res
 }

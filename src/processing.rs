@@ -268,7 +268,7 @@ mod tests {
             service_name: "test".to_string(),
             log_level: "info".to_string(),
             data_directory: data_out.to_string_lossy().to_string(),
-            serial_port: "/dev/null".to_string(),
+            serial_port: Some("/dev/null".to_string()),
             baud_rate: 115200,
             idle_threshold_seconds: 30,
             alert_webhook: None,
