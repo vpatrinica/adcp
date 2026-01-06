@@ -84,7 +84,7 @@ mod pipeline_windows {
 }
 
     mod sample_replay {
-        use adcp::{simulator, AppConfig};
+        use adcp::{config::{ServiceMode, SplitMode}, simulator, AppConfig};
         use std::fs;
         use tempfile::tempdir;
 
@@ -99,6 +99,14 @@ mod pipeline_windows {
                 baud_rate: 115200,
                 idle_threshold_seconds: 30,
                 alert_webhook: None,
+                mode: ServiceMode::Recording,
+                backup_folder: "./backup".into(),
+                data_process_folder: "./to_process".into(),
+                processed_folder: "./processed".into(),
+                split_mode: SplitMode::Daily,
+                max_backup_files: None,
+                max_backup_age_days: None,
+                file_stability_seconds: 5,
             };
 
             simulator::replay_sample("tests/sample.data", &cfg)
@@ -128,6 +136,14 @@ mod pipeline_windows {
                 baud_rate: 115200,
                 idle_threshold_seconds: 30,
                 alert_webhook: None,
+                mode: ServiceMode::Recording,
+                backup_folder: "./backup".into(),
+                data_process_folder: "./to_process".into(),
+                processed_folder: "./processed".into(),
+                split_mode: SplitMode::Daily,
+                max_backup_files: None,
+                max_backup_age_days: None,
+                file_stability_seconds: 5,
             };
 
             simulator::replay_sample("tests/sample2.data", &cfg)

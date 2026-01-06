@@ -1,17 +1,17 @@
-use adcp::{logging, platform, simulator, AppConfig, Service};
+use adcp::{logging, platform, AppConfig, Service, simulator};
 use anyhow::{bail, Context, Result};
 
 #[derive(Debug)]
 struct Cli {
     config_path: String,
-    sample_path: Option<String>,
+    replay: Option<String>,
 }
 
 impl Cli {
     fn parse() -> Result<Self> {
         let mut args = std::env::args().skip(1);
         let mut config_path: Option<String> = None;
-        let mut sample_path: Option<String> = None;
+        let mut replay: Option<String> = None;
 
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -21,17 +21,17 @@ impl Cli {
                         .ok_or_else(|| anyhow::anyhow!("--config requires a path"))?;
                     config_path = Some(value);
                 }
-                "--sample" => {
+                "--replay" => {
                     let value = args
                         .next()
-                        .ok_or_else(|| anyhow::anyhow!("--sample requires a path"))?;
-                    sample_path = Some(value);
+                        .ok_or_else(|| anyhow::anyhow!("--replay requires a path"))?;
+                    replay = Some(value);
                 }
                 "--help" | "-h" => {
                     println!(
-                        "Usage: adcp [--config <path>] [--sample <capture>]\n\
+                        "Usage: adcp [--config <path>] [--replay <sample>]\n\
                          --config <path>   Path to TOML configuration (default: config/adcp.toml)\n\
-                         --sample <path>   Replay newline-delimited capture file instead of serial"
+                         --replay <path>   Replay a capture file through the pipeline and exit"
                     );
                     std::process::exit(0);
                 }
@@ -47,7 +47,7 @@ impl Cli {
 
         Ok(Self {
             config_path: config_path.unwrap_or_else(|| AppConfig::default_path().into()),
-            sample_path,
+            replay,
         })
     }
 }
@@ -62,10 +62,10 @@ async fn main() -> Result<()> {
     logging::init(&config)?;
     platform::log_platform_guidance();
 
-    if let Some(sample) = cli.sample_path {
-        tracing::info!(sample = %sample, data_dir = %config.data_directory, "replaying capture from sample file");
-        simulator::replay_sample(sample, &config).await
-    } else {
-        Service::new(config).run().await
+    if let Some(sample) = cli.replay {
+        simulator::replay_sample(sample, &config).await?;
+        return Ok(());
     }
+
+    Service::new(config).run().await
 }

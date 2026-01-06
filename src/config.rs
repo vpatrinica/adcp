@@ -2,7 +2,19 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
+pub enum ServiceMode {
+    Recording,
+    Processing,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub enum SplitMode {
+    Daily,
+    Weekly,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     pub service_name: String,
     #[serde(default = "default_log_level")]
@@ -16,10 +28,28 @@ pub struct AppConfig {
     pub idle_threshold_seconds: u64,
     #[serde(default)]
     pub alert_webhook: Option<String>,
+    #[serde(default = "default_mode")]
+    pub mode: ServiceMode,
+    #[serde(default = "default_backup_folder")]
+    pub backup_folder: String,
+    #[serde(default = "default_data_process_folder")]
+    pub data_process_folder: String,
+    #[serde(default = "default_processed_folder")]
+    pub processed_folder: String,
+    #[serde(default = "default_split_mode")]
+    pub split_mode: SplitMode,
+    pub max_backup_files: Option<usize>,
+    pub max_backup_age_days: Option<u64>,
+    #[serde(default = "default_file_stability_secs")]
+    pub file_stability_seconds: u64,
 }
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_file_stability_secs() -> u64 {
+    5
 }
 
 fn default_data_dir() -> String {
@@ -32,6 +62,26 @@ fn default_baud_rate() -> u32 {
 
 fn default_idle_threshold_secs() -> u64 {
     30
+}
+
+fn default_mode() -> ServiceMode {
+    ServiceMode::Recording
+}
+
+fn default_backup_folder() -> String {
+    "./backup".to_string()
+}
+
+fn default_data_process_folder() -> String {
+    "./to_process".to_string()
+}
+
+fn default_processed_folder() -> String {
+    "./processed".to_string()
+}
+
+fn default_split_mode() -> SplitMode {
+    SplitMode::Daily
 }
 
 impl AppConfig {
@@ -76,5 +126,14 @@ serial_port = \"/dev/null\""
         assert_eq!(config.baud_rate, 115200);
         assert_eq!(config.idle_threshold_seconds, 30);
         assert!(config.alert_webhook.is_none());
+        // New defaults
+        assert!(matches!(config.mode, ServiceMode::Recording));
+        assert_eq!(config.backup_folder, "./backup");
+        assert_eq!(config.data_process_folder, "./to_process");
+        assert_eq!(config.processed_folder, "./processed");
+        assert!(matches!(config.split_mode, SplitMode::Daily));
+        assert!(config.max_backup_files.is_none());
+        assert!(config.max_backup_age_days.is_none());
+        assert_eq!(config.file_stability_seconds, 5);
     }
 }

@@ -11,19 +11,34 @@ Cross-platform ADCP acquisition service focused on configuration discipline, str
 1. Install Rust 1.78+ via rustup (Linux or Windows).  
 2. Build the service: `cargo build --release`.  
 3. Run with the example configuration: `./target/release/adcp --config config/adcp.toml`.  
-4. Override `--config` to point to a production-grade TOML file.  
-5. Simulate without hardware by replaying the bundled capture: `cargo run -- --sample tests/sample.data` (writes dated logs to `data_directory`).
+4. Override `--config` to point to a production-grade TOML file.
+
+Notes:
+- The binary runs in one of two modes (configured with `mode` in `config/adcp.toml`): `Recording` or `Processing` (see Configuration below).  
+- The previous `--sample` CLI replay option has been removed; sample replays remain supported in tests, but normal operation is via the configured modes.
 
 ## Configuration
 | Key | Meaning | Default |
 | --- | ------- | ------- |
 | `service_name` | Friendly identifier seen in logs and watchdogs | `adcp-supervisor` |
+| `mode` | Operational mode: `Recording` (captures serial → backup + processing) or `Processing` (processes files from `data_process_folder`) | `Recording` |
+| `backup_folder` | Directory for raw rolling backup files (recording) | `./backup` |
+| `data_process_folder` | Directory where recorder appends files for processing | `./to_process` |
+| `processed_folder` | Directory where successfully processed files are moved | `./processed` |
+| `split_mode` | Rolling window for backups (`Daily` or `Weekly`) | `Daily` |
+| `max_backup_files` | Optional limit on number of backup files to keep | `None` |
+| `max_backup_age_days` | Optional age-based cleanup for backups | `None` |
+| `file_stability_seconds` | Time in seconds a file must be idle (and writer marker absent/old) before processing | `5` |
 | `log_level` | Tracing verbosity (`error`, `warn`, `info`, `debug`, `trace`) | `info` |
-| `data_directory` | Destination directory for rotating files | `./data` |
+| `data_directory` | Destination directory for processed and persisted data | `./data` |
 | `serial_port` | Physical or virtual serial port to bind (e.g., `/dev/ttyUSB0` or `COM3`) | n/a |
 | `baud_rate` | Serial baud rate used during handshake | `115200` |
-| `idle_threshold_seconds` | Seconds without frames before raising an alert | `30` |
+| `idle_threshold_seconds` | Seconds without parsed frames before raising a health alert | `30` |
 | `alert_webhook` | Optional URL to notify when health alerts fire | empty |
+
+Notes:
+- `Recording` mode: reads serial, persists parsed frames to `data_directory`, writes raw capture into `backup_folder` (rolling) and appends to `data_process_folder` for downstream processing.
+- `Processing` mode: scans `data_process_folder`, waits for files to become stable (no writes and no recent `.writing` marker), replays them through the parser + persistence pipeline, then moves files to `processed_folder` on success (or adds `.failed` suffix on permanent failure).
 
 Any missing option falls back to a sane default so the service can self-heal after partial deployments.
 
@@ -59,12 +74,15 @@ The Windows service crate is configured as a target-specific dependency so build
 
 ## Runtime capabilities
 - Serial polling and parsing reuses the existing supervisor loop so every ADCP line is parsed, validated, and persisted.
-- Persistence writes daily rotated logs under `data_directory`, ensuring health metrics can audit runtime state.
-- In replay mode, log rotation uses each payload's timestamp so captures land in files named after their recording date.
+- Recording mode writes raw serial capture to a rolling **backup folder** and appends to a **processing folder**; parsing and persistence continue unaffected by backup failures.
+- The recorder updates a lightweight `<filename>.writing` marker when appending to `data_process_folder` so the processor can avoid files still being written to.
+- Processing mode scans the `data_process_folder`, waits for files to be stable (no recent writes and no recent marker), replays files through the parser/persistence pipeline, and moves completed files to `processed_folder`.
+- Persistence writes daily rotated logs under `data_directory`, using payload timestamps for correct rotation during replay or processing.
 - The supervisor exposes a health monitor that logs heartbeats and promotes alerts when frames stop arriving (with optional webhook logging).
 
 ## AWAC NMEA payloads (DF=100)
 - Sample capture: [tests/sample.data](tests/sample.data)
+- End-to-end fixtures: `tests/fixtures/` — run them with `cargo test --test e2e` or `cargo run -- --config config/adcp.toml --replay tests/fixtures/<fixture>.data`
 - Shared rules: values that are empty or start with `-9` (for example `-9`, `-9.00`, `-999`) mean "not valid"; the XOR checksum is the two-hex digits after `*`, computed over everything between `$` and `*`.
 - `$PNORI` (configuration): instrument type (`4` = Signature), head ID string, beams (integer), cells (integer), blanking distance m (float), cell size m (float), coordinate system (`0`=ENU, `1`=XYZ, `2`=BEAM), checksum.
 - `$PNORS` (sensor data): date `MMDDYY`, time `hhmmss`, error code (hex), status code (hex), battery voltage V (float), sound speed m/s (float), heading deg (float), pitch deg (float), roll deg (float), pressure dBar (float), temperature °C (float), analog input #1 (float), analog input #2 (float), checksum.

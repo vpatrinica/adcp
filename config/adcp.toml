@@ -3,3 +3,20 @@ log_level = "info"
 data_directory = "./data"
 serial_port = "/dev/ttyUSB0"
 baud_rate = 115200
+
+# Recording example
+# service_name = "adcp-recorder"
+# mode = "Recording"
+# serial_port = "/dev/ttyUSB0"
+# backup_folder = "/data/adcp/backup"
+# data_process_folder = "/data/adcp/to_process"
+# split_mode = "Daily"
+# max_backup_age_days = 30
+# file_stability_seconds = 5
+
+# Processing example
+# service_name = "adcp-processor"
+# mode = "Processing"
+# data_process_folder = "/data/adcp/to_process"
+# processed_folder = "/data/adcp/processed"
+# data_directory = "/data/adcp/output"
