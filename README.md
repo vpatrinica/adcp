@@ -11,7 +11,8 @@ Cross-platform ADCP acquisition service focused on configuration discipline, str
 1. Install Rust 1.78+ via rustup (Linux or Windows).  
 2. Build the service: `cargo build --release`.  
 3. Run with the example configuration: `./target/release/adcp --config config/adcp.toml`.  
-4. Override `--config` to point to a production-grade TOML file.
+4. Override `--config` to point to a production-grade TOML file.  
+5. Simulate without hardware by replaying the bundled capture: `cargo run -- --sample tests/sample.data` (writes dated logs to `data_directory`).
 
 ## Configuration
 | Key | Meaning | Default |
@@ -59,6 +60,7 @@ The Windows service crate is configured as a target-specific dependency so build
 ## Runtime capabilities
 - Serial polling and parsing reuses the existing supervisor loop so every ADCP line is parsed, validated, and persisted.
 - Persistence writes daily rotated logs under `data_directory`, ensuring health metrics can audit runtime state.
+- In replay mode, log rotation uses each payload's timestamp so captures land in files named after their recording date.
 - The supervisor exposes a health monitor that logs heartbeats and promotes alerts when frames stop arriving (with optional webhook logging).
 
 ## AWAC NMEA payloads (DF=100)

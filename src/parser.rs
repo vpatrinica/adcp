@@ -132,7 +132,7 @@ impl Frame {
 }
 
 impl Payload {
-    fn sent_at(&self) -> Option<DateTime<Utc>> {
+    pub fn sent_at(&self) -> Option<DateTime<Utc>> {
         match self {
             Payload::Config(_) => None,
             Payload::Sensor(s) => Some(s.sent_at),

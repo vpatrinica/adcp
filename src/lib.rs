@@ -6,6 +6,7 @@ pub mod persistence;
 pub mod platform;
 pub mod serial;
 pub mod service;
+pub mod simulator;
 
 pub use config::AppConfig;
 pub use service::Service;

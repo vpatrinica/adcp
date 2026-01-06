@@ -82,3 +82,71 @@ mod pipeline_windows {
         // Mock/virtual COM scenario: we only assert the pipeline accepts data without a real port.
     }
 }
+
+    mod sample_replay {
+        use adcp::{simulator, AppConfig};
+        use std::fs;
+        use tempfile::tempdir;
+
+        #[tokio::test]
+        async fn replays_sample_file_into_dated_log() {
+            let tmp = tempdir().expect("temp dir");
+            let cfg = AppConfig {
+                service_name: "sample-supervisor".into(),
+                log_level: "info".into(),
+                data_directory: tmp.path().to_string_lossy().to_string(),
+                serial_port: "/dev/null".into(),
+                baud_rate: 115200,
+                idle_threshold_seconds: 30,
+                alert_webhook: None,
+            };
+
+            simulator::replay_sample("tests/sample.data", &cfg)
+                .await
+                .expect("replay sample");
+
+            let mut entries: Vec<String> = fs::read_dir(tmp.path())
+                .expect("read data dir")
+                .filter_map(|res| res.ok().and_then(|e| e.file_name().into_string().ok()))
+                .collect();
+            entries.sort();
+            assert!(entries.iter().any(|name| name.contains("2026-01-05")));
+
+            let dated = tmp.path().join("adcp-2026-01-05.log");
+            let content = fs::read_to_string(dated).expect("read dated log");
+            assert!(content.lines().count() >= 2);
+        }
+
+        #[tokio::test]
+        async fn replays_sample2_and_rotates_across_days() {
+            let tmp = tempdir().expect("temp dir");
+            let cfg = AppConfig {
+                service_name: "sample2-supervisor".into(),
+                log_level: "info".into(),
+                data_directory: tmp.path().to_string_lossy().to_string(),
+                serial_port: "/dev/null".into(),
+                baud_rate: 115200,
+                idle_threshold_seconds: 30,
+                alert_webhook: None,
+            };
+
+            simulator::replay_sample("tests/sample2.data", &cfg)
+                .await
+                .expect("replay sample2");
+
+            let mut entries: Vec<String> = fs::read_dir(tmp.path())
+                .expect("read data dir")
+                .filter_map(|res| res.ok().and_then(|e| e.file_name().into_string().ok()))
+                .collect();
+            entries.sort();
+            assert!(entries.iter().any(|name| name.contains("2026-01-05")));
+            assert!(entries.iter().any(|name| name.contains("2026-02-05")));
+
+            let day1 = tmp.path().join("adcp-2026-01-05.log");
+            let day2 = tmp.path().join("adcp-2026-02-05.log");
+            let day1_lines = fs::read_to_string(day1).expect("read day1 log");
+            let day2_lines = fs::read_to_string(day2).expect("read day2 log");
+            assert!(day1_lines.lines().count() >= 3);
+            assert!(day2_lines.lines().count() >= 2);
+        }
+    }
