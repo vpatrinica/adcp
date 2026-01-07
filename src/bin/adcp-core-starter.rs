@@ -29,6 +29,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Conf Manager spawned with PID: {:?}", conf_manager.id());
 
+    // Spawn QA
+    let mut qa = Command::new("cargo")
+        .args(&["run", "--bin", "adcp-core-qa"])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+    println!("QA Watchdog spawned with PID: {:?}", qa.id());
+
+    // Spawn Proc Manager
+    let mut proc_manager = Command::new("cargo")
+        .args(&["run", "--bin", "adcp-proc-manager"])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+    println!("Proc Manager spawned with PID: {:?}", proc_manager.id());
+
     println!("All core services started. Press Ctrl-C to stop.");
 
     // Wait for shutdown signal
@@ -36,6 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Stopping services...");
 
     // Kill processes
+    let _ = proc_manager.kill().await;
+    let _ = qa.kill().await;
     let _ = conf_manager.kill().await;
     let _ = broker.kill().await;
 

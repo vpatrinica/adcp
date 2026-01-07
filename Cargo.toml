@@ -23,6 +23,8 @@ tokio-serial = "5.4"
 serde_json = "1.0"
 busrt = { version = "0.4", features = ["broker", "rpc", "ipc"] }
 async-trait = "0.1"
+ratatui = "0.26"
+crossterm = "0.27"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"
@@ -56,3 +58,11 @@ path = "src/bin/adcp-core-broker.rs"
 [[bin]]
 name = "adcp-port-recorder"
 path = "src/bin/adcp-port-recorder.rs"
+
+[[bin]]
+name = "adcp-core-qa"
+path = "src/bin/adcp-core-qa.rs"
+
+[[bin]]
+name = "adcp-proc-manager"
+path = "src/bin/adcp-proc-manager.rs"
