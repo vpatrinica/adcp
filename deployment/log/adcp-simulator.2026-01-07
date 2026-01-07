@@ -1,0 +1,2 @@
+2026-01-07T01:12:23.651109Z  INFO adcp::platform: platform-specific service descriptor available template="[Service]\nExecStart=adcp.exe --config C:\\etc\\adcp\\adcp.toml\nRestart=always\n"
+2026-01-07T01:12:23.727275Z  INFO adcp::platform: platform-specific service descriptor available template="[Service]\nExecStart=adcp.exe --config C:\\etc\\adcp\\adcp.toml\nRestart=always\n"

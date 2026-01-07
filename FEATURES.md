@@ -57,6 +57,7 @@ This document outlines the features currently implemented in the ADCP acquisitio
 
 ### Serial Data Backup and Separate Processing
 - Recording process writes raw serial captures to a **backup folder** (rolling files) and appends to a **processing folder** simultaneously ✅. For the `data_process_folder`, the recorder uses a per-append mode (open/write/close) to avoid holding long-lived file descriptors that would prevent safe movement by the processor.
+
 - The recorder updates a lightweight `<filename>.writing` marker each time it appends; the processor skips files with recent markers to avoid reading files that are actively being written.
 - Processing scans the `data_process_folder`, waits for files to become stable (mtime older than `file_stability_seconds` and no recent writer marker), replays them through the existing parser/persistence pipeline, then moves completed files into a **processed** folder on success or renames them with a `.failed` suffix on permanent failure ✅.
 - Separation enables restartable processing that does not interrupt ongoing capture and allows historical processing of backlog ✅.

@@ -3,4 +3,4 @@ mode = "Processing"
 data_process_folder = "./deployment/to_process"
 processed_folder = "./deployment/processed"
 data_directory = "./deployment/data"
-file_stability_seconds = 30
+file_stability_seconds = 5

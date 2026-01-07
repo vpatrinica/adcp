@@ -1,4 +1,4 @@
-use adcp::{logging, platform, AppConfig, Service, simulator};
+use adcp::{logging, platform, AppConfig, Service, simulator, config::ServiceMode};
 use anyhow::{bail, Context, Result};
 
 #[derive(Debug)]
@@ -52,6 +52,40 @@ impl Cli {
     }
 }
 
+async fn cleanup_orphans(tmp_dir: &str) {
+    if let Ok(rd) = std::fs::read_dir(tmp_dir) {
+        let my_pid = std::process::id();
+        for entry in rd.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.ends_with(".pid") {
+                    let path = entry.path();
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        if let Ok(pid) = content.trim().parse::<u32>() {
+                            if pid != my_pid {
+                                tracing::info!(pid = pid, "cleaning up orphaned process");
+                                #[cfg(unix)]
+                                {
+                                    unsafe { libc::kill(pid as i32, 9) };
+                                }
+                                #[cfg(windows)]
+                                {
+                                    let _ = std::process::Command::new("taskkill")
+                                        .arg("/F")
+                                        .arg("/PID")
+                                        .arg(pid.to_string())
+                                        .spawn()
+                                        .and_then(|mut c| c.wait());
+                                }
+                                let _ = std::fs::remove_file(path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let cli = Cli::parse()?;
@@ -66,6 +100,12 @@ async fn main() -> Result<()> {
     let tmp_dir = "./deployment/tmp";
     std::fs::create_dir_all(tmp_dir).with_context(|| format!("failed to create tmp dir {}", tmp_dir))?;
 
+    // Cleanup any orphaned processes from previous runs
+    // ONLY if we are the orchestrator or in replay mode
+    if matches!(config.mode, ServiceMode::Orchestrator) || cli.replay.is_some() {
+        cleanup_orphans(tmp_dir).await;
+    }
+
     // On Unix, make this process the leader of a new process group so we can signal children
     #[cfg(unix)]
     {
@@ -79,6 +119,7 @@ async fn main() -> Result<()> {
     // Spawn a task to remove the pid file on SIGINT/SIGTERM (Unix) or ctrl-c (Windows)
     // and attempt to gracefully shut down child processes by signaling the process group.
     let pid_path_clone = pid_path.clone();
+    let tmp_dir_clone = tmp_dir.to_string();
     tokio::spawn(async move {
         #[cfg(unix)]
         {
@@ -101,26 +142,23 @@ async fn main() -> Result<()> {
             unsafe { libc::kill(pgid, libc::SIGKILL) };
 
             // Best-effort: cleanup any leftover adcp-*.pid files in deployment/tmp
-            if let Ok(rd) = std::fs::read_dir("./deployment/tmp") {
-                for entry in rd.flatten() {
-                    if let Some(name) = entry.file_name().to_str() {
-                        if name.starts_with("adcp-") && name.ends_with(".pid") {
-                            let _ = std::fs::remove_file(entry.path());
-                        }
-                    }
-                }
-            }
+            cleanup_orphans(&tmp_dir_clone).await;
         }
         #[cfg(windows)]
         {
             // On Windows, best-effort: trigger ctrl-c handler
             tokio::signal::ctrl_c().await.ok();
+            cleanup_orphans(&tmp_dir_clone).await;
         }
         let _ = std::fs::remove_file(&pid_path_clone);
     });
 
     if let Some(sample) = cli.replay {
-        simulator::replay_sample(sample, &config).await?;
+        let result = simulator::replay_sample(sample, &config).await?;
+        if !result.failures.is_empty() {
+            tracing::warn!("replay encountered {} failures", result.failures.len());
+        }
+        let _ = std::fs::remove_file(&pid_path);
         return Ok(());
     }
 

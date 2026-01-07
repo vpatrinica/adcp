@@ -1,7 +1,0 @@
-2026-01-06T23:46:44.826794Z  INFO adcp::platform: platform-specific service descriptor available template="[Unit]\nDescription=ADCP acquisition service\nAfter=network.target\n\n[Service]\nExecStart=/usr/local/bin/adcp --config /etc/adcp/adcp.toml\nRestart=on-failure\n\n[Install]\nWantedBy=multi-user.target\n"
-2026-01-06T23:46:44.827247Z  INFO adcp::service: serial capture starting service=adcp-recorder data_dir=./deployment/data port=./deployment/tmp/adcp_fifo
-2026-01-06T23:46:44.828361Z  INFO adcp::metrics: health heartbeat service=adcp-recorder frames=0 parse_errors=0 persistence_errors=0
-2026-01-06T23:46:49.503007Z  WARN adcp::service: serial port closed service=adcp-recorder
-2026-01-06T23:46:50.503778Z  WARN adcp::service: serial port closed service=adcp-recorder
-2026-01-06T23:46:51.505189Z  WARN adcp::service: serial port closed service=adcp-recorder
-2026-01-06T23:46:52.507385Z  WARN adcp::service: serial port closed service=adcp-recorder

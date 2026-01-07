@@ -25,7 +25,7 @@ data_directory = "C:\\ProgramData\\adcp"
         .expect("write config");
 
         let cfg = AppConfig::load(file.path()).expect("load config");
-        assert_eq!(cfg.serial_port, "COM9");
+        assert_eq!(cfg.serial_port.as_deref(), Some("COM9"));
         assert_eq!(cfg.data_directory, "C:\\ProgramData\\adcp");
     }
 }

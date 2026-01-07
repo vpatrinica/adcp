@@ -54,6 +54,37 @@ impl Backup {
         create_dir_all(&base)
             .await
             .with_context(|| format!("failed to create backup directory {}", base.display()))?;
+
+        if !per_append {
+            // Task: Protection for the backup folder between reruns.
+            // Move any existing .raw files to an archive subfolder to avoid mixing runs.
+            let mut entries = tokio::fs::read_dir(&base).await?;
+            let mut files_to_archive = Vec::new();
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if ext == "raw" {
+                            files_to_archive.push(path);
+                        }
+                    }
+                }
+            }
+
+            if !files_to_archive.is_empty() {
+                let archive_name = format!("archive_{}", Utc::now().format("%Y%m%d_%H%M%S"));
+                let archive_dir = base.join(archive_name);
+                tokio::fs::create_dir_all(&archive_dir).await?;
+                for file_path in files_to_archive {
+                    if let Some(filename) = file_path.file_name() {
+                        let dest = archive_dir.join(filename);
+                        tokio::fs::rename(&file_path, &dest).await?;
+                    }
+                }
+                tracing::info!(dir = %archive_dir.display(), "archived existing backup files to prevent overwrite between runs");
+            }
+        }
+
         Ok(Self {
             base,
             current_file: None,

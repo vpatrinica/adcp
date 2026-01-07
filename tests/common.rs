@@ -8,8 +8,8 @@ pub fn replay_fixture_and_collect(fixture: &str) -> (TempDir, Vec<String>) {
     // Write a minimal config pointing at the temp data dir
     let cfg_path = tmp.path().join("adcp.toml");
     let cfg = format!(
-        "service_name = \"e2e-test\"\nserial_port = \"/dev/null\"\nlog_level = \"info\"\ndata_directory = \"{}\"\n",
-        data_dir.display()
+        "service_name = 'e2e-test'\nserial_port = '/dev/null'\nlog_level = 'info'\ndata_directory = '{}'\n",
+        data_dir.display().to_string().replace("\\", "/")
     );
     fs::write(&cfg_path, cfg).expect("write config");
 

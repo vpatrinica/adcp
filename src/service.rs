@@ -44,6 +44,7 @@ impl Service {
             alert_webhook,
             backup_folder,
             data_process_folder,
+            file_stability_seconds,
             ..
         } = &self.config;
 
@@ -85,8 +86,9 @@ impl Service {
         let hb_path = format!("{}/adcp_{}_hb", tmp_dir, service_name.replace(' ', "_"));
         let mut hb_shutdown = shutdown_rx.clone();
         let hb_name = hb_path.clone();
+        let hb_interval = StdDuration::from_secs(std::cmp::min(5, *file_stability_seconds).max(1));
         let hb_handle = tokio::spawn(async move {
-            let mut ticker = interval(StdDuration::from_secs(2));
+            let mut ticker = interval(hb_interval);
             loop {
                 tokio::select! {
                     _ = hb_shutdown.changed() => break,
@@ -241,8 +243,9 @@ impl Service {
         let hb_path = format!("{}/adcp_{}_hb", tmp_dir, service_name.replace(' ', "_"));
         let mut hb_shutdown = shutdown_rx.clone();
         let hb_name = hb_path.clone();
+        let hb_interval = StdDuration::from_secs(std::cmp::min(5, self.config.file_stability_seconds).max(1));
         let hb_handle = tokio::spawn(async move {
-            let mut ticker = interval(StdDuration::from_secs(2));
+            let mut ticker = interval(hb_interval);
             loop {
                 tokio::select! {
                     _ = hb_shutdown.changed() => break,
@@ -275,11 +278,21 @@ impl Service {
         let tmp_dir = "./deployment/tmp".to_string();
         fs::create_dir_all(&tmp_dir).await.ok();
         let fifo_path = format!("{}/adcp_fifo", tmp_dir);
-        // Create FIFO
-        std::process::Command::new("mkfifo")
-            .arg(&fifo_path)
-            .status()
-            .context("failed to create FIFO")?;
+        // Create FIFO (Unix only)
+        #[cfg(unix)]
+        {
+            std::process::Command::new("mkfifo")
+                .arg(&fifo_path)
+                .status()
+                .context("failed to create FIFO")?;
+        }
+        #[cfg(windows)]
+        {
+            // On Windows, create a regular file to stand in for the FIFO.
+            // This allows the recorder to "connect" to it before the simulator starts writing.
+            let _ = tokio::fs::remove_file(&fifo_path).await;
+            let _ = tokio::fs::File::create(&fifo_path).await;
+        }
         
         // Spawn simulator
         let simulator_config = format!("service_name = \"adcp-simulator\"\nmode = \"Simulator\"\nserial_port = \"{}\"\nsample_file = \"tests/sample.data\"\n", fifo_path);
@@ -490,10 +503,11 @@ impl Service {
         fs::create_dir_all(&tmp_dir).await.ok();
         let hb_name = format!("{}/adcp_{}_hb", tmp_dir, self.config.service_name.replace(' ', "_"));
         use tokio::time::interval as tokio_interval;
+        let hb_interval = StdDuration::from_secs(std::cmp::min(5, self.config.file_stability_seconds).max(1));
         let hb_handle = tokio::spawn({
             let hb_name = hb_name.clone();
             async move {
-                let mut ticker = tokio_interval(StdDuration::from_secs(2));
+                let mut ticker = tokio_interval(hb_interval);
                 loop {
                     ticker.tick().await;
                     let _ = tokio::fs::write(&hb_name, format!("{}", chrono::Utc::now().timestamp())).await;
@@ -506,6 +520,7 @@ impl Service {
 
         let mut file = fs::OpenOptions::new()
             .write(true)
+            .create(true) // Ensure file is created if not already there (especially for Windows "FIFO" simulation)
             .open(fifo_path)
             .await
             .with_context(|| format!("failed to open FIFO {}", fifo_path))?;

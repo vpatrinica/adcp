@@ -1,0 +1,8 @@
+2026-01-07T01:12:23.624590Z  INFO adcp::platform: platform-specific service descriptor available template="[Service]\nExecStart=adcp.exe --config C:\\etc\\adcp\\adcp.toml\nRestart=always\n"
+2026-01-07T01:12:23.626735Z  INFO adcp: Starting cleanup_orphans, my PID is 27928
+2026-01-07T01:12:23.660006Z  WARN adcp::service: heartbeat stale — restarting job heartbeat=./deployment/tmp/adcp_adcp-recorder_hb
+2026-01-07T01:12:23.661305Z  WARN adcp::service: heartbeat stale — restarting job heartbeat=./deployment/tmp/adcp_adcp-processor_hb
+2026-01-07T01:12:23.661888Z  WARN adcp::service: heartbeat stale — restarting job heartbeat=./deployment/tmp/adcp_adcp-simulator_hb
+2026-01-07T01:12:23.668413Z  INFO adcp::service: restarted job cmd=./deployment/tmp/processor.toml
+2026-01-07T01:12:23.700547Z  INFO adcp::service: restarted job cmd=./deployment/tmp/recorder.toml
+2026-01-07T01:12:23.711730Z  INFO adcp::service: restarted job cmd=./deployment/tmp/simulator.toml

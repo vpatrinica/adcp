@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::fs::File;
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
+
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
 enum ReaderSource {
@@ -18,8 +20,16 @@ pub struct SerialPort {
 
 impl SerialPort {
     pub async fn connect(port: &str, baud_rate: u32) -> Result<Self> {
-        let metadata = std::fs::metadata(port)?;
-        let reader = if metadata.file_type().is_fifo() {
+        let _metadata = std::fs::metadata(port)?;
+        
+        let is_fifo_or_file = {
+            #[cfg(unix)]
+            { _metadata.file_type().is_fifo() || _metadata.is_file() }
+            #[cfg(not(unix))]
+            { _metadata.is_file() }
+        };
+
+        let reader = if is_fifo_or_file {
             // Treat as FIFO/file
             let file = File::open(port)
                 .await

@@ -3,8 +3,17 @@ use anyhow::{Context, Result};
 use std::{path::Path, sync::Arc};
 use tokio::fs;
 
+/// Result of a replay operation, containing metrics and any failures.
+#[derive(Debug, Default)]
+pub struct ReplayResult {
+    pub frames_processed: usize,
+    pub parse_errors: usize,
+    pub persistence_errors: usize,
+    pub failures: Vec<String>,
+}
+
 /// Replays a newline-delimited capture file through the parser and persistence pipeline.
-pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) -> Result<()> {
+pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) -> Result<ReplayResult> {
     let data_dir = &config.data_directory;
     let persistence = Arc::new(
         Persistence::new(data_dir)
@@ -12,6 +21,7 @@ pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) ->
             .context("prepare persistence backend")?,
     );
     let metrics = Metrics::new();
+    let mut failures = Vec::new();
 
     let raw = fs::read_to_string(sample_path.as_ref())
         .await
@@ -20,12 +30,24 @@ pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) ->
     for raw_line in normalize_capture(&raw) {
         match Frame::from_line(&raw_line) {
             Ok(frame) => {
-                persistence.append(&frame).await?;
-                metrics.record_frame();
+                // Task: .failed files should include discarded parts even if the line partially parsed.
+                for discarded in &frame.discarded {
+                    failures.push(discarded.clone());
+                }
+                
+                if let Err(err) = persistence.append(&frame).await {
+                    metrics.record_persistence_error();
+                    tracing::error!(error = %err, "persistence failed during replay");
+                    // If persistence fails, we consider the whole frame a failure in terms of processing
+                    failures.push(raw_line);
+                } else {
+                    metrics.record_frame();
+                }
             }
             Err(err) => {
                 metrics.record_parse_error();
                 tracing::warn!(error = %err, frame = %raw_line, "sample frame rejected");
+                failures.push(raw_line);
             }
         }
     }
@@ -39,7 +61,12 @@ pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) ->
         "sample replay completed"
     );
 
-    Ok(())
+    Ok(ReplayResult {
+        frames_processed: snapshot.frames as usize,
+        parse_errors: snapshot.parse_errors as usize,
+        persistence_errors: snapshot.persistence_errors as usize,
+        failures,
+    })
 }
 
 fn normalize_capture(raw: &str) -> Vec<String> {

@@ -75,14 +75,20 @@ pub async fn run_processing_loop(
                     tracing::info!(file = %file.display(), "processing stable file (no recent writer marker detected)");
                     any_work = true;
                     match simulator::replay_sample(&file, &config).await {
-                        Ok(_) => {
+                        Ok(res) => {
+                            if !res.failures.is_empty() {
+                                // Task: .failed files should only include the contents which failed.
+                                if let Err(err) = write_failures(&file, &processed_dir, &res.failures).await {
+                                    tracing::error!(file = %file.display(), error = %err, "failed to write partial failures");
+                                }
+                            }
                             if let Err(err) = move_to_processed(&file, &processed_dir).await {
                                 tracing::error!(file = %file.display(), error = %err, "failed to move processed file");
                             }
                         }
                         Err(err) => {
-                            tracing::error!(file = %file.display(), error = %err, "processing failed");
-                            // Move to processed folder with .failed suffix to mark for manual inspection
+                            tracing::error!(file = %file.display(), error = %err, "processing failed (critical error)");
+                            // Move entire file to processed folder with .failed suffix if we couldn't even read/replay it.
                             if let Err(move_err) = move_failed(&file, &processed_dir).await {
                                 tracing::error!(file = %file.display(), error = %move_err, "failed to move failed file");
                             }
@@ -148,6 +154,16 @@ async fn is_stable(path: &PathBuf, stable_secs: u64) -> Result<bool> {
             Ok(true)
         }
     }
+}
+
+async fn write_failures(path: &PathBuf, processed_dir: &PathBuf, failures: &[String]) -> Result<()> {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| anyhow::anyhow!("file has no file name"))?;
+    let dest = processed_dir.join(format!("{}.failed", name));
+    fs::write(&dest, failures.join("\n")).await?;
+    Ok(())
 }
 
 async fn move_to_processed(path: &PathBuf, processed_dir: &PathBuf) -> Result<()> {

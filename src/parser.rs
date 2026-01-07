@@ -10,6 +10,9 @@ pub struct Frame {
     pub raw: String,
     pub checksum: Checksum,
     pub payload: Payload,
+    /// Parts of the raw line that were discarded during parsing.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub discarded: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -101,7 +104,7 @@ pub enum AmplitudeUnit {
 impl Frame {
     pub fn from_line(line: &str) -> Result<Self> {
         let raw = line.trim_end_matches(|c| c == '\r' || c == '\n').trim();
-        let (provided, computed, body) = validate_checksum(raw)?;
+        let (provided, computed, body, discarded) = validate_checksum(raw)?;
         let fields: Vec<&str> = body.split(',').collect();
         let ident = fields
             .get(0)
@@ -123,6 +126,7 @@ impl Frame {
                 valid: provided == computed,
             },
             payload,
+            discarded,
         })
     }
 
@@ -141,51 +145,70 @@ impl Payload {
     }
 }
 
-fn validate_checksum(raw: &str) -> Result<(u8, u8, &str)> {
-    let (body, checksum_hex) = raw
+fn validate_checksum(raw: &str) -> Result<(u8, u8, &str, Vec<String>)> {
+    let mut discarded = Vec::new();
+    let (body_raw, checksum_hex) = raw
         .rsplit_once('*')
         .ok_or_else(|| anyhow!("NMEA sentence missing '*' checksum delimiter"))?;
-    let original = checksum_hex;
-    let checksum_hex = checksum_hex.trim_end_matches("\r\n");
-    // Collect the first two hex digits after '*' and ignore any trailing junk.
+    let original_checksum = checksum_hex;
+    
     let mut hex_chars = String::with_capacity(2);
-    for c in checksum_hex.chars() {
+    let mut last_hex_pos = 0;
+    for (i, c) in checksum_hex.chars().enumerate() {
         if c.is_ascii_hexdigit() {
             hex_chars.push(c);
             if hex_chars.len() == 2 {
+                last_hex_pos = i + 1;
                 break;
             }
         } else if !c.is_whitespace() {
-            // stop at the first non-hex, non-space char once we've seen any chars
             if !hex_chars.is_empty() {
                 break;
             }
         }
     }
     if hex_chars.len() != 2 {
-        bail!("checksum '{}' is not two hex digits, original '{}'", hex_chars, original);
+        bail!("checksum '{}' is not two hex digits, original '{}'", hex_chars, original_checksum);
     }
+    if last_hex_pos < original_checksum.len() {
+        let junk = &original_checksum[last_hex_pos..];
+        if !junk.trim().is_empty() {
+            discarded.push(junk.to_string());
+        }
+    }
+
     let provided = u8::from_str_radix(&hex_chars, 16)
-        .with_context(|| format!("checksum '{}' is not hex, original '{}'", hex_chars, original))?;
+        .with_context(|| format!("checksum '{}' is not hex, original '{}'", hex_chars, original_checksum))?;
 
     // If the body contains junk before a known sentence ($PNORC/$PNORS/$PNORI), trim it.
-    let mut body = body;
-    if let Some(pos) = body.find("$PNORC") {
-        body = &body[pos..];
-    } else if let Some(pos) = body.find("$PNORS") {
-        body = &body[pos..];
-    } else if let Some(pos) = body.find("$PNORI") {
-        body = &body[pos..];
+    let mut body = body_raw;
+    let mut found_pos = None;
+    for marker in ["$PNORC", "$PNORS", "$PNORI"] {
+        if let Some(pos) = body.find(marker) {
+            if found_pos.map_or(true, |p| pos < p) {
+                found_pos = Some(pos);
+            }
+        }
+    }
+    
+    if let Some(pos) = found_pos {
+        if pos > 0 {
+            let junk = &body[..pos];
+            if !junk.trim().is_empty() {
+                discarded.push(junk.to_string());
+            }
+            body = &body[pos..];
+        }
     }
 
-    let body = body.strip_prefix('$').unwrap_or(body);
-    let computed = body.bytes().fold(0u8, |acc, b| acc ^ b);
+    let body_valid = body.strip_prefix('$').unwrap_or(body);
+    let computed = body_valid.bytes().fold(0u8, |acc, b| acc ^ b);
     if provided != computed {
         bail!(
             "checksum mismatch: provided {provided:02X} != computed {computed:02X}"
         );
     }
-    Ok((provided, computed, body))
+    Ok((provided, computed, body_valid, discarded))
 }
 
 fn parse_config(fields: &[&str]) -> Result<ConfigSentence> {
@@ -438,5 +461,14 @@ mod tests {
             }
             _ => panic!("expected current"),
         }
+    }
+
+    #[test]
+    fn parses_with_junk_and_records_it() {
+        let raw = "prefix_junk$PNORI,4,Signature1000_100297,4,21,0.20,1.00,0*41suffix_junk";
+        let frame = Frame::from_line(raw).expect("parse config with junk");
+        assert_eq!(frame.discarded.len(), 2);
+        assert!(frame.discarded.contains(&"prefix_junk".to_string()));
+        assert!(frame.discarded.contains(&"suffix_junk".to_string()));
     }
 }
