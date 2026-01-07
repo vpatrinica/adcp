@@ -14,7 +14,9 @@ pub fn replay_fixture_and_collect(fixture: &str) -> (TempDir, Vec<String>) {
     fs::write(&cfg_path, cfg).expect("write config");
 
     // Run the binary with the replay flag
-    Command::new(assert_cmd::cargo::cargo_bin!("adcp"))
+    // Renamed binary to adcp-legacy in Cargo.toml
+    Command::new(assert_cmd::cargo::cargo_bin!("adcp-legacy"))
+        .arg("--config")
         .arg(&cfg_path)
         .arg("--replay")
         .arg(fixture)

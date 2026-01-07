@@ -12,3 +12,4 @@ pub mod processing;
 
 pub use config::{AppConfig, ServiceMode, SplitMode};
 pub use service::Service;
+pub mod telemetry;

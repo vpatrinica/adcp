@@ -1,2 +1,0 @@
-2026-01-06T23:46:44.828392Z  INFO adcp::platform: platform-specific service descriptor available template="[Unit]\nDescription=ADCP acquisition service\nAfter=network.target\n\n[Service]\nExecStart=/usr/local/bin/adcp --config /etc/adcp/adcp.toml\nRestart=on-failure\n\n[Install]\nWantedBy=multi-user.target\n"
-2026-01-06T23:46:44.829751Z  INFO adcp::metrics: health heartbeat service=adcp-processor frames=0 parse_errors=0 persistence_errors=0
