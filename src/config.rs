@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ServiceMode {
     Recording,
     Processing,
@@ -10,13 +10,13 @@ pub enum ServiceMode {
     Simulator,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum SplitMode {
     Daily,
     Weekly,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AppConfig {
     pub service_name: String,
     #[serde(default = "default_log_level")]
@@ -126,15 +126,15 @@ serial_port = \"/dev/null\""
         assert_eq!(config.service_name, "test-dummy");
         assert_eq!(config.serial_port.as_deref(), Some("/dev/null"));
         assert_eq!(config.log_level, "info");
-        assert_eq!(config.data_directory, "./data");
+        assert_eq!(config.data_directory, "./deployment/data");
         assert_eq!(config.baud_rate, 115200);
         assert_eq!(config.idle_threshold_seconds, 30);
         assert!(config.alert_webhook.is_none());
         // New defaults
         assert!(matches!(config.mode, ServiceMode::Recording));
-        assert_eq!(config.backup_folder, "./backup");
-        assert_eq!(config.data_process_folder, "./to_process");
-        assert_eq!(config.processed_folder, "./processed");
+        assert_eq!(config.backup_folder, "./deployment/backup");
+        assert_eq!(config.data_process_folder, "./deployment/to_process");
+        assert_eq!(config.processed_folder, "./deployment/processed");
         assert!(matches!(config.split_mode, SplitMode::Daily));
         assert!(config.max_backup_files.is_none());
         assert!(config.max_backup_age_days.is_none());

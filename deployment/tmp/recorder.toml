@@ -1,5 +1,0 @@
-service_name = "adcp-recorder"
-mode = "Recording"
-serial_port = "./deployment/tmp/adcp_fifo"
-data_process_folder = "./deployment/to_process"
-backup_folder = "./deployment/backup"
