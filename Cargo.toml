@@ -66,3 +66,7 @@ path = "src/bin/adcp-core-qa.rs"
 [[bin]]
 name = "adcp-proc-manager"
 path = "src/bin/adcp-proc-manager.rs"
+
+[[bin]]
+name = "adcp-proc-worker"
+path = "src/bin/adcp-proc-worker.rs"

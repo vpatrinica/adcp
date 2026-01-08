@@ -1,7 +1,8 @@
 use crate::{metrics::Metrics, parser::Frame, persistence::Persistence, AppConfig};
 use anyhow::{Context, Result};
 use std::{path::Path, sync::Arc};
-use tokio::fs;
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 /// Replays a newline-delimited capture file through the parser and persistence pipeline.
 pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) -> Result<()> {
@@ -13,19 +14,42 @@ pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) ->
     );
     let metrics = Metrics::new();
 
-    let raw = fs::read_to_string(sample_path.as_ref())
+    let file = File::open(sample_path.as_ref())
         .await
         .with_context(|| format!("open sample capture {}", sample_path.as_ref().display()))?;
 
-    for raw_line in normalize_capture(&raw) {
-        match Frame::from_line(&raw_line) {
-            Ok(frame) => {
-                persistence.append(&frame).await?;
-                metrics.record_frame();
-            }
-            Err(err) => {
-                metrics.record_parse_error();
-                tracing::warn!(error = %err, frame = %raw_line, "sample frame rejected");
+    let mut reader = BufReader::new(file).lines();
+
+    while let Some(line) = reader.next_line().await? {
+        // The original logic handled literal "\r\n" in the sample file for tests.
+        // For line-by-line reading, `lines()` handles actual CRLF.
+        // But if the file contains *literal* escaped chars "\\r\\n" (as in the test fixture),
+        // we might need to handle it.
+        // However, `lines()` splits on \n or \r\n.
+        // The normalize_capture function was doing `replace("\\r\\n", "\n")` which suggests literal string replacement.
+        // If real files don't contain "\\r\\n" literals but actual CRLF, streaming is fine.
+        // If they do, we need to process the line.
+        // Assuming test fixtures might be special.
+        // Let's preserve normalization per line.
+
+        let normalized = line.replace("\\r\\n", "\n").replace('\r', "\n");
+        // Split by $ if multiple frames per line (though usually 1 per line)
+        for chunk in normalized.split('$') {
+             let trimmed = chunk.trim();
+             if trimmed.is_empty() {
+                 continue;
+             }
+             let raw_line = format!("${}", trimmed);
+
+             match Frame::from_line(&raw_line) {
+                Ok(frame) => {
+                    persistence.append(&frame).await?;
+                    metrics.record_frame();
+                }
+                Err(err) => {
+                    metrics.record_parse_error();
+                    tracing::warn!(error = %err, frame = %raw_line, "sample frame rejected");
+                }
             }
         }
     }
@@ -43,8 +67,6 @@ pub async fn replay_sample(sample_path: impl AsRef<Path>, config: &AppConfig) ->
 }
 
 fn normalize_capture(raw: &str) -> Vec<String> {
-    // The bundled sample uses literal "\\r\\n" sequences; treat both literal and actual CRLF
-    // as frame delimiters and rebuild clean lines that start with '$'.
     let normalized = raw.replace("\\r\\n", "\n").replace('\r', "\n");
     normalized
         .split('$')
