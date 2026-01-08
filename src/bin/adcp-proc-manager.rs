@@ -1,4 +1,4 @@
-use adcp::AppConfig;
+use adcp::{simulator, AppConfig};
 use busrt::client::AsyncClient;
 use busrt::ipc::{Client, Config};
 use busrt::rpc::{RpcClient, RpcEvent, RpcHandlers, RpcResult};
@@ -27,6 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load config
     let config_path = AppConfig::default_path();
     let config = AppConfig::load(config_path)?;
+    let app_config = Arc::new(config.clone());
 
     let name = format!("adcp.proc.manager.{}", std::process::id());
 
@@ -51,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut interval = tokio::time::interval(Duration::from_secs(2));
         loop {
             interval.tick().await;
-            if let Err(e) = scan_and_process(&process_folder, &processed_folder, stability_sec).await {
+            if let Err(e) = scan_and_process(&process_folder, &processed_folder, stability_sec, &app_config).await {
                 eprintln!("Processing scan error: {}", e);
             }
         }
@@ -63,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn scan_and_process(src: &Path, dst: &Path, stability_sec: u64) -> std::io::Result<()> {
+async fn scan_and_process(src: &Path, dst: &Path, stability_sec: u64, config: &AppConfig) -> std::io::Result<()> {
     let mut entries = fs::read_dir(src)?;
     let now = std::time::SystemTime::now();
 
@@ -91,13 +92,20 @@ async fn scan_and_process(src: &Path, dst: &Path, stability_sec: u64) -> std::io
                     if age.as_secs() >= stability_sec {
                         println!("Processing file: {:?}", path);
 
-                        // Process (Simulated for now, calling internal logic or adcp-proc-worker later)
-                        // In Phase 4 step 1, we just need the manager logic.
-                        // We move it to processed.
-
-                        let dest_path = dst.join(path.file_name().unwrap());
-                        fs::rename(&path, &dest_path)?;
-                        println!("Moved to: {:?}", dest_path);
+                        match simulator::replay_sample(&path, config).await {
+                            Ok(_) => {
+                                println!("Processing successful.");
+                                let dest_path = dst.join(path.file_name().unwrap());
+                                fs::rename(&path, &dest_path)?;
+                                println!("Moved to: {:?}", dest_path);
+                            }
+                            Err(e) => {
+                                eprintln!("Processing failed for {:?}: {}", path, e);
+                                let dest_path = dst.join(format!("{}.failed", path.file_name().unwrap().to_string_lossy()));
+                                fs::rename(&path, &dest_path)?;
+                                println!("Moved to: {:?}", dest_path);
+                            }
+                        }
                     }
                 }
             }
