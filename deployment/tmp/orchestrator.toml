@@ -1,5 +1,0 @@
-service_name = "adcp-orchestrator"
-mode = "Orchestrator"
-serial_port = "NUL"
-data_directory = "./deployment/data"
-file_stability_seconds = 5

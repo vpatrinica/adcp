@@ -1,6 +1,0 @@
-service_name = "adcp-processor"
-mode = "Processing"
-data_process_folder = "./deployment/to_process"
-processed_folder = "./deployment/processed"
-data_directory = "./deployment/data"
-file_stability_seconds = 5

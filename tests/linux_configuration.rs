@@ -19,7 +19,7 @@ data_directory = "./linux-data"
 
         let config = AppConfig::load(file.path()).expect("load config");
         assert_eq!(config.service_name, "linux-supervisor");
-        assert_eq!(config.serial_port, "/tmp/ttyADCP");
+        assert_eq!(config.serial_port.as_deref(), Some("/tmp/ttyADCP"));
         assert_eq!(config.data_directory, "./linux-data");
         assert_eq!(config.log_level, "info");
         assert_eq!(config.baud_rate, 115200);

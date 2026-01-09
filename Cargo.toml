@@ -7,6 +7,7 @@ description = "Cross-platform ADCP acquisition service with operational resilien
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/your-org/adcp"
 readme = "README.md"
+default-run = "adcp-legacy"
 
 [dependencies]
 anyhow = "1.0"
@@ -20,6 +21,10 @@ toml = "0.7"
 chrono = { version = "0.4", features = ["clock", "serde"] }
 tokio-serial = "5.4"
 serde_json = "1.0"
+busrt = { version = "0.4", features = ["broker", "rpc", "ipc"] }
+async-trait = "0.1"
+ratatui = "0.26"
+crossterm = "0.27"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"
@@ -29,3 +34,35 @@ tempfile = "3"
 assert_cmd = "2"
 predicates = "2"
 libc = "0.2"
+
+[[bin]]
+name = "adcp-legacy"
+path = "src/bin/adcp-legacy.rs"
+
+[[bin]]
+name = "adcp-conf-manager"
+path = "src/bin/adcp-conf-manager.rs"
+
+[[bin]]
+name = "adcp-cli"
+path = "src/bin/adcp-cli.rs"
+
+[[bin]]
+name = "adcp-core-starter"
+path = "src/bin/adcp-core-starter.rs"
+
+[[bin]]
+name = "adcp-core-broker"
+path = "src/bin/adcp-core-broker.rs"
+
+[[bin]]
+name = "adcp-port-recorder"
+path = "src/bin/adcp-port-recorder.rs"
+
+[[bin]]
+name = "adcp-core-qa"
+path = "src/bin/adcp-core-qa.rs"
+
+[[bin]]
+name = "adcp-proc-manager"
+path = "src/bin/adcp-proc-manager.rs"
